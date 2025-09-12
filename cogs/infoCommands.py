@@ -127,7 +127,7 @@ class InfoCommands(commands.Cog):
             embed = discord.Embed(
                 title="Allowed channels for !info",
                 description="\n".join(channels),
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
             cooldown = self.config_data["servers"][guild_id]["config"].get("cooldown", self.config_data["global_settings"]["default_cooldown"])
             embed.set_footer(text=f"Current cooldown: {cooldown} seconds")
@@ -135,7 +135,7 @@ class InfoCommands(commands.Cog):
             embed = discord.Embed(
                 title="Allowed channels for !info",
                 description="All channels are allowed (no restriction configured)",
-                color=discord.Color.blue()
+                color=discord.Color.red()
             )
 
         await ctx.send(embed=embed)
@@ -257,7 +257,7 @@ class InfoCommands(commands.Cog):
 
 
 
-            embed.set_footer(text="DEVELOPED BY THUG")
+            embed.set_footer(text="DEVELOPED BY RAJA")
             await ctx.send(embed=embed)
 
             if region and uid:
