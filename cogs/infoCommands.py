@@ -5,11 +5,10 @@ import aiohttp
 from datetime import datetime
 import json
 import os
-import asyncio
 import io
 import uuid
 import gc
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageStat
 
 CONFIG_FILE = "info_channels.json"
 
@@ -26,13 +25,6 @@ class InfoCommands(commands.Cog):
     def convert_unix_timestamp(self, timestamp: int) -> str:
         return datetime.utcfromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
-    def check_request_limit(self, guild_id):
-        try:
-            return self.is_server_subscribed(guild_id) or not self.is_limit_reached(guild_id)
-        except Exception as e:
-            print(f"Error checking request limit: {e}")
-            return False
-
     def load_config(self):
         default_config = {
             "servers": {},
@@ -42,7 +34,6 @@ class InfoCommands(commands.Cog):
                 "default_daily_limit": 30
             }
         }
-
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r') as f:
@@ -180,58 +171,10 @@ class InfoCommands(commands.Cog):
                 f"**└─ Signature**: {social_info.get('signature', 'None') or 'None'}"
             ]), inline=False)
 
-            embed.add_field(name="", value="\n".join([
-                "**┌  ACCOUNT ACTIVITY**",
-                f"**├─ Most Recent OB**: {basic_info.get('releaseVersion', '?')}",
-                f"**├─ Current BP Badges**: {basic_info.get('badgeCnt', 'Not found')}",
-                f"**├─ BR Rank**: {'' if basic_info.get('showBrRank') else 'Not found'} {basic_info.get('rankingPoints', '?')}",
-                f"**├─ CS Rank**: {'' if basic_info.get('showCsRank') else 'Not found'} {basic_info.get('csRankingPoints', '?')} ",
-                f"**├─ Created At**: {self.convert_unix_timestamp(int(basic_info.get('createAt', 'Not found')))}",
-                f"**└─ Last Login**: {self.convert_unix_timestamp(int(basic_info.get('lastLoginAt', 'Not found')))}"
-            ]), inline=False)
-
-            embed.add_field(name="", value="\n".join([
-                "**┌  ACCOUNT OVERVIEW**",
-                f"**├─ Avatar ID**: {profile_info.get('avatarId', 'Not found')}",
-                f"**├─ Banner ID**: {basic_info.get('bannerId', 'Not found')}",
-                f"**├─ Pin ID**: {captain_info.get('pinId', 'Not found') if captain_info else 'Default'}",
-                f"**└─ Equipped Skills**: {profile_info.get('equipedSkills', 'Not found')}"
-            ]), inline=False)
-
-            embed.add_field(name="", value="\n".join([
-                "**┌  PET DETAILS**",
-                f"**├─ Equipped?**: {'Yes' if pet_info.get('isSelected') else 'Not Found'}",
-                f"**├─ Pet Name**: {pet_info.get('name', 'Not Found')}",
-                f"**├─ Pet Exp**: {pet_info.get('exp', 'Not Found')}**",
-                f"**└─ Pet Level**: {pet_info.get('level', 'Not Found')}"
-            ]), inline=False)
-
-            if clan_info:
-                guild_info = [
-                    "**┌  GUILD INFO**",
-                    f"**├─ Guild Name**: {clan_info.get('clanName', 'Not found')}",
-                    f"**├─ Guild ID**: `{clan_info.get('clanId', 'Not found')}`",
-                    f"**├─ Guild Level**: {clan_info.get('clanLevel', 'Not found')} ",
-                    f"**├─ Live Members**: {clan_info.get('memberNum', 'Not found')}/{clan_info.get('capacity', '?')}"
-                ]
-                if captain_info:
-                    guild_info.extend([
-                        "**└─ Leader Info**:",
-                        f"    **├─ Leader Name**: {captain_info.get('nickname', 'Not found')}",
-                        f"    **├─ Leader UID**: `{captain_info.get('accountId', 'Not found')}`",
-                        f"    **├─ Leader Level**: {captain_info.get('level', 'Not found')} (Exp: {captain_info.get('exp', '?')})",
-                        f"    **├─ Last Login**: {self.convert_unix_timestamp(int(captain_info.get('lastLoginAt', 'Not found')))}",
-                        f"    **├─ Title**: {captain_info.get('title', 'Not found')}",
-                        f"    **├─ BP Badges**: {captain_info.get('badgeCnt', '?')}",
-                        f"    **├─ BR Rank**: {'' if captain_info.get('showBrRank') else 'Not found'} {captain_info.get('rankingPoints', 'Not found')}",
-                        f"    **└─ CS Rank**: {'' if captain_info.get('showCsRank') else 'Not found'} {captain_info.get('csRankingPoints', 'Not found')} "
-                    ])
-                embed.add_field(name="", value="\n".join(guild_info), inline=False)
-
             embed.set_footer(text="DEVELOPED BY RAJA")
             await ctx.send(embed=embed)
 
-            # --- IMAGE WITH CUSTOM WATERMARK ---
+            # --- IMAGE WITH AUTOMATIC CENTER WATERMARK REPLACEMENT ---
             if region and uid:
                 try:
                     image_url = f"{self.generate_url}?uid={uid}"
@@ -239,10 +182,20 @@ class InfoCommands(commands.Cog):
                         if img_file.status == 200:
                             img_bytes = await img_file.read()
                             img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-                            draw = ImageDraw.Draw(img)
                             width, height = img.size
 
-                            # Load font
+                            # Define center area for watermark automatically
+                            center_w = int(width * 0.5)
+                            center_h = int(height * 0.08)
+                            x = (width - center_w) // 2
+                            y = (height - center_h) // 2
+
+                            draw = ImageDraw.Draw(img)
+
+                            # Fill center area (transparent)
+                            draw.rectangle([x, y, x + center_w, y + center_h], fill=(0, 0, 0, 0))
+
+                            # Draw new watermark text
                             try:
                                 font = ImageFont.truetype("arial.ttf", size=int(height * 0.05))
                             except:
@@ -250,37 +203,20 @@ class InfoCommands(commands.Cog):
 
                             text = "@rajaxmods"
                             text_width, text_height = draw.textsize(text, font=font)
-
-                            # Position at center
-                            x = (width - text_width) // 2
-                            y = (height - text_height) // 2
+                            tx = x + (center_w - text_width) // 2
+                            ty = y + (center_h - text_height) // 2
 
                             # Outline for visibility
                             outline_range = 2
                             for ox in range(-outline_range, outline_range + 1):
                                 for oy in range(-outline_range, outline_range + 1):
-                                    draw.text((x + ox, y + oy), text, font=font, fill="black")
-                            draw.text((x, y), text, font=font, fill="white")
+                                    draw.text((tx + ox, ty + oy), text, font=font, fill="black")
+                            draw.text((tx, ty), text, font=font, fill="white")
 
-                            # Save to buffer
+                            # Save to buffer and send
                             buffer = io.BytesIO()
                             img.save(buffer, format="PNG")
                             buffer.seek(0)
                             file = discord.File(buffer, filename=f"profile_{uid}.png")
                             await ctx.send(file=file)
-                        else:
-                            print(f"HTTP error while fetching image: {img_file.status}")
-                except Exception as e:
-                    print("Image processing failed:", e)
-
-        except Exception as e:
-            await ctx.send(f" Unexpected error: `{e}`")
-        finally:
-            gc.collect()
-
-    async def cog_unload(self):
-        await self.session.close()
-
-
-async def setup(bot):
-    await bot.add_cog(InfoCommands(bot))
+                       
