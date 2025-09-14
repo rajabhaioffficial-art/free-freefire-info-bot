@@ -8,7 +8,7 @@ import os
 import io
 import uuid
 import gc
-from PIL import Image, ImageDraw, ImageFont, ImageStat
+from PIL import Image, ImageDraw, ImageFont
 
 CONFIG_FILE = "info_channels.json"
 
@@ -219,4 +219,19 @@ class InfoCommands(commands.Cog):
                             buffer.seek(0)
                             file = discord.File(buffer, filename=f"profile_{uid}.png")
                             await ctx.send(file=file)
-                       
+                        else:
+                            await ctx.send("❌ Failed to fetch profile image.")
+                except Exception as e:
+                    await ctx.send(f"❌ Image generation failed: `{e}`")
+
+        except Exception as e:
+            await ctx.send(f" Unexpected error: `{e}`")
+        finally:
+            gc.collect()
+
+    async def cog_unload(self):
+        await self.session.close()
+
+
+async def setup(bot):
+    await bot.add_cog(InfoCommands(bot))
